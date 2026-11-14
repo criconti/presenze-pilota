@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Presenze · Admin</title>
+<link rel="stylesheet" href="stile.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script><script src="common.js"></script>
+</head><body><main id="app"><p>Caricamento…</p></main>
+<script>
+const app = $('#app');
+const D = {};
+let V;
+
+avvia(app, async () => {
+  const { data } = await sb.from('admins').select('user_id');
+  if (!data || !data.length) {
+    app.innerHTML = `<h1>Admin</h1><div class="err">Questo account non e' abilitato come amministratore.</div><p><a href="#" onclick="esci();return false">Esci</a></p>`;
+    return;
+  }
+  app.innerHTML = `<h1>Presenze · Pannello admin</h1>
+    <nav>${[['aule','Sedi e aule'],['corsi','Corsi'],['studenti','Studenti'],['lezioni','Lezioni'],['presenze','Presenze'],['anomalie','Anomalie'],['giust','Giustificazioni']]
+      .map(([k, n]) => `<button data-t="${k}" onclick="nav('${k}')">${n}</button>`).join('')}
+      <button class="sec" onclick="esci()">Esci</button></nav><div id="view"></div>`;
+  V = $('#view');
+  nav('aule');
+});
+
+const TABS = { aule: tAule, corsi: tCorsi, studenti: tStudenti, lezioni: tLezioni, presenze: tPresenze, anomalie: tAnomalie, giust: tGiust };
+function nav(t) {
+  document.querySelectorAll('nav button[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  V.innerHTML = '<p>Caricamento…</p>';
+  TABS[t]().catch(e => { V.innerHTML = `<div class="err">${esc(e.message || e)}</div>`; });
+}
+function chk(r) { if (r.error) { alert('Errore: ' + r.error.message); throw r.error; } return r.data; }
+const opt = (l, f) => l.map(x => `<option value="${x.id}">${esc(f(x))}</option>`).join('');
+const fd = form => Object.fromEntries([...new FormData(form)].map(([k, v]) => [k, v === '' ? null : v]));
+const un = x => [].concat(x || [])[0];
+
+async function loadBase() {
+  const [a, b, c, d] = await Promise.all([
+    sb.from('sedi').select('*').order('nome'),
+    sb.from('aule').select('*, sedi(nome), schermi(token), reti_ammesse(id,etichetta,ip_pubblico,attiva)').order('nome'),
+    sb.from('corsi').select('*').order('nome'),
+    sb.from('lezioni').select('*, corsi(nome), aule(nome)').order('inizio', { ascending: false }).limit(300)
+  ]);
+  D.sedi = chk(a); D.aule = chk(b); D.corsi = chk(c); D.lezioni = chk(d);
+  const senza = D.aule.filter(x => !un(x.schermi));
+  if (senza.length) {
+    chk(await sb.from('schermi').insert(senza.map(x => ({ aula_id: x.id }))));
+    D.aule = chk(await sb.from('aule').select('*, sedi(nome), schermi(token), reti_ammesse(id,etichetta,ip_pubblico,attiva)').order('nome'));
+  }
+}
+
+/* ---------- SEDI E AULE ---------- */
+async function tAule() {
+  await loadBase();
+  V.innerHTML = `<h2>Sedi</h2>
+    <form id="fs" class="riga"><input name="nome" placeholder="Nome sede" required><input name="indirizzo" placeholder="Indirizzo"><button>Aggiungi sede</button></form>
+    <p>${D.sedi.map(s => esc(s.nome)).join(' · ') || '<span class="muted">Nessuna sede</span>'}</p>
+    <h2>Aule</h2>
+    <form id="fa" class="riga"><select name="sede_id" required>${opt(D.sedi, s => s.nome)}</select><input name="nome" placeholder="Nome aula" required><input name="capienza" type="number" placeholder="Capienza"><button>Aggiungi aula</button></form>
+    <p class="muted">Per registrare la rete di un'aula: collegati al suo Wi-Fi da questo pannello e premi "Usa la rete attuale". Se il Wi-Fi ha piu' uscite internet, ripetilo piu' volte.</p>
+    <div class="tab-wrap"><table><tr><th>Sede</th><th>Aula</th><th>Reti ammesse</th><th>Azioni</th></tr>
+    ${D.aule.map(a => `<tr><td>${esc(a.sedi?.nome)}</td><td>${esc(a.nome)}</td>
+      <td>${(a.reti_ammesse || []).map(r => `${esc(r.ip_pubblico)} ${esc(r.etichetta || '')} <a href="#" onclick="delRete('${r.id}');return false">elimina</a>`).join('<br>') || '<span class="muted">nessuna</span>'}</td>
+      <td><button onclick="reteQui('${a.id}')">Usa la rete attuale</button><br><a href="schermo.html?t=${un(a.schermi)?.token}" target="_blank">Apri schermo aula</a></td></tr>`).join('')}
+    </table></div>`;
+  $('#fs').onsubmit = async e => { e.preventDefault(); chk(await sb.from('sedi').insert(fd(e.target))); tAule(); };
+  $('#fa').onsubmit = async e => { e.preventDefault(); chk(await sb.from('aule').insert(fd(e.target))); tAule(); };
+}
+async function reteQui(id) {
+  const et = prompt('Nome per questa rete (es. "Wi-Fi Aula 3"):');
+  if (et === null) return;
+  const r = chk(await sb.rpc('usa_rete_attuale', { p_aula: id, p_etichetta: et }));
+  alert(r.ok ? 'Rete registrata. IP: ' + r.ip : r.errore);
+  tAule();
+}
+async function delRete(id) { if (confirm('Eliminare questa rete?')) { chk(await sb.from('reti_ammesse').delete().eq('id', id)); tAule(); } }
+
+/* ---------- CORSI ---------- */
+async function tCorsi() {
+  await loadBase();
+  const conta = await Promise.all(D.corsi.map(c => sb.from('iscrizioni').select('*', { count: 'exact', head: true }).eq('corso_id', c.id)));
+  V.innerHTML = `<h2>Corsi</h2>
+    <form id="fc" class="riga"><input name="codice" placeholder="Codice"><input name="nome" placeholder="Nome corso" required><input name="docente" placeholder="Docente"><input name="anno_accademico" placeholder="A.A. (es. 2026/27)"><button>Aggiungi corso</button></form>
+    <div class="tab-wrap"><table><tr><th>Codice</th><th>Corso</th><th>Docente</th><th>A.A.</th><th>Iscritti</th></tr>
+    ${D.corsi.map((c, i) => `<tr><td>${esc(c.codice)}</td><td>${esc(c.nome)}</td><td>${esc(c.docente)}</td><td>${esc(c.anno_accademico)}</td><td>${conta[i].count ?? 0}</td></tr>`).join('')}</table></div>`;
+  $('#fc').onsubmit = async e => { e.preventDefault(); chk(await sb.from('corsi').insert(fd(e.target))); tCorsi(); };
+}
+
+/* ---------- STUDENTI ---------- */
+async function tStudenti() {
+  await loadBase();
+  V.innerHTML = `<h2>Importa studenti</h2>
+    <p>Una riga per studente: <code>matricola ; cognome ; nome ; email</code>. Da Excel: copia le 4 colonne e incollale qui sotto, oppure carica un file .csv. Gli studenti vengono iscritti al corso scelto.</p>
+    <div class="riga"><select id="ic">${opt(D.corsi, c => c.nome)}</select><input type="file" id="f" accept=".csv,.txt"></div>
+    <textarea id="t" rows="10" placeholder="123456;Rossi;Mario;mario.rossi@studenti.unito.it"></textarea>
+    <p><button onclick="importa()">Importa e iscrivi</button></p><div id="ris"></div>`;
+  $('#f').onchange = async e => { $('#t').value = await e.target.files[0].text(); };
+}
+async function importa() {
+  const corso = $('#ic').value;
+  if (!corso) return alert('Crea prima un corso');
+  const righe = $('#t').value.split(/\r?\n/).map(l => l.split(/[;\t,]/).map(x => x.trim())).filter(r => r.length >= 4 && r[0]);
+  if (righe.length && /matricola/i.test(righe[0][0])) righe.shift();
+  const mappa = new Map(righe.map(r => [r[0], { matricola: r[0], cognome: r[1], nome: r[2], email: r[3].toLowerCase() }]));
+  const rows = [...mappa.values()];
+  if (!rows.length) return alert('Nessuna riga valida');
+  $('#ris').innerHTML = 'Importazione in corso…';
+  const ids = [];
+  try {
+    for (let i = 0; i < rows.length; i += 300) {
+      const r = await sb.from('studenti').upsert(rows.slice(i, i + 300), { onConflict: 'matricola' }).select('id');
+      if (r.error) throw r.error;
+      ids.push(...r.data.map(x => x.id));
+    }
+    for (let i = 0; i < ids.length; i += 500) {
+      const r = await sb.from('iscrizioni').upsert(ids.slice(i, i + 500).map(id => ({ corso_id: corso, studente_id: id })), { onConflict: 'corso_id,studente_id' });
+      if (r.error) throw r.error;
+    }
+    $('#ris').innerHTML = `<div class="ok">Importati e iscritti <b>${ids.length}</b> studenti.</div>`;
+  } catch (e) {
+    $('#ris').innerHTML = `<div class="err">${esc(e.message)}<br><small>Controlla che non ci siano email ripetute con matricole diverse.</small></div>`;
+  }
+}
+
+/* ---------- LEZIONI ---------- */
+async function tLezioni() {
+  await loadBase();
+  V.innerHTML = `<h2>Nuova lezione o evento</h2>
+    <form id="fl"><div class="riga"><select name="corso_id" required>${opt(D.corsi, c => c.nome)}</select><select name="aula_id" required>${opt(D.aule, a => (a.sedi?.nome || '') + ' · ' + a.nome)}</select>
+    <select name="tipo"><option value="lezione">Lezione</option><option value="evento">Evento</option></select>
+    <label><input type="checkbox" name="obbligatoria" checked> Obbligatoria</label></div>
+    <div class="riga"><label>Inizio <input type="datetime-local" name="inizio" required></label><label>Fine <input type="datetime-local" name="fine" required></label>
+    <label>Ripeti ogni settimana per <input type="number" name="n" value="1" min="1" max="30" style="width:70px"> volte</label><button>Crea</button></div></form>
+    <div class="tab-wrap"><table><tr><th>Data</th><th>Fine</th><th>Corso</th><th>Aula</th><th>Tipo</th><th></th></tr>
+    ${D.lezioni.map(l => `<tr><td>${fmt(l.inizio)}</td><td>${fmt(l.fine)}</td><td>${esc(l.corsi?.nome)}</td><td>${esc(l.aule?.nome)}</td><td>${l.tipo}${l.obbligatoria ? '' : ' (facolt.)'}</td><td><a href="#" onclick="delLez('${l.id}');return false">elimina</a></td></tr>`).join('')}</table></div>`;
+  $('#fl').onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target), n = Math.max(1, +f.get('n') || 1), rows = [];
+    for (let k = 0; k < n; k++) {
+      const i = new Date(f.get('inizio')), o = new Date(f.get('fine'));
+      i.setDate(i.getDate() + 7 * k); o.setDate(o.getDate() + 7 * k);
+      rows.push({ corso_id: f.get('corso_id'), aula_id: f.get('aula_id'), tipo: f.get('tipo'), obbligatoria: f.get('obbligatoria') === 'on', inizio: i.toISOString(), fine: o.toISOString() });
+    }
+    chk(await sb.from('lezioni').insert(rows)); tLezioni();
+  };
+}
+async function delLez(id) { if (confirm('Eliminare la lezione e le sue presenze?')) { chk(await sb.from('lezioni').delete().eq('id', id)); tLezioni(); } }
+
+/* ---------- PRESENZE ---------- */
+let ULT = null;
+async function tPresenze() {
+  await loadBase();
+  V.innerHTML = `<h2>Presenze</h2><div class="riga"><select id="pl">${D.lezioni.map(l => `<option value="${l.id}">${fmt(l.inizio)} · ${esc(l.corsi?.nome)} · ${esc(l.aule?.nome)}</option>`).join('')}</select>
+    <button onclick="mostra()">Mostra</button><button class="sec" onclick="xLezione()">Excel lezione</button><button class="sec" onclick="xCorso()">Excel corso intero</button></div><div id="pt" class="tab-wrap"></div>`;
+  if (D.lezioni.length) mostra();
+}
+async function righeLezione(id) {
+  const l = D.lezioni.find(x => x.id === id);
+  const [isc, pre, gi] = await Promise.all([
+    all(() => sb.from('iscrizioni').select('studenti(id,matricola,cognome,nome)').eq('corso_id', l.corso_id).order('studente_id')),
+    all(() => sb.from('presenze').select('*').eq('lezione_id', id).order('id')),
+    all(() => sb.from('giustificazioni').select('*').eq('lezione_id', id).order('id'))
+  ]);
+  const pm = new Map(pre.map(p => [p.studente_id, p])), gm = new Map(gi.map(g => [g.studente_id, g]));
+  const righe = isc.map(i => i.studenti).filter(Boolean).sort((a, b) => (a.cognome + a.nome).localeCompare(b.cognome + b.nome)).map(s => {
+    const p = pm.get(s.id), g = gm.get(s.id);
+    const stato = p ? (p.anomalia ? 'Presente (da verificare)' : 'Presente')
+      : g ? (g.stato === 'accettata' ? 'Assente giustificato' : g.stato === 'in_attesa' ? 'Assente (giust. in attesa)' : 'Assente')
+      : 'Assente';
+    return [s.matricola, s.cognome, s.nome, stato, p ? fmt(p.creato_il) : '', p ? (p.rete_ok ? 'Si' : 'No') : '', p?.anomalia || '', g?.motivo || ''];
+  });
+  return { l, righe, intest: ['Matricola', 'Cognome', 'Nome', 'Stato', 'Orario', 'Rete aula', 'Anomalia', 'Giustificazione'] };
+}
+async function mostra() {
+  $('#pt').innerHTML = 'Caricamento…';
+  ULT = await righeLezione($('#pl').value);
+  const pres = ULT.righe.filter(r => r[3].startsWith('Presente')).length;
+  $('#pt').innerHTML = `<p><b>${pres}</b> presenti su <b>${ULT.righe.length}</b> iscritti</p><table><tr>${ULT.intest.map(h => `<th>${h}</th>`).join('')}</tr>` +
+    ULT.righe.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('') + '</table>';
+}
+async function xLezione() {
+  if (!ULT) await mostra();
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([ULT.intest, ...ULT.righe]), 'Presenze');
+  const d = new Date(ULT.l.inizio).toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `presenze_${(ULT.l.corsi?.nome || 'corso').replace(/\W+/g, '_')}_${d}.xlsx`);
+}
+async function xCorso() {
+  const l0 = D.lezioni.find(x => x.id === $('#pl').value);
+  const lez = D.lezioni.filter(x => x.corso_id === l0.corso_id).sort((a, b) => new Date(a.inizio) - new Date(b.inizio));
+  const ids = lez.map(x => x.id);
+  const [isc, pre, gi] = await Promise.all([
+    all(() => sb.from('iscrizioni').select('studenti(id,matricola,cognome,nome)').eq('corso_id', l0.corso_id).order('studente_id')),
+    all(() => sb.from('presenze').select('lezione_id,studente_id,anomalia').in('lezione_id', ids).order('id')),
+    all(() => sb.from('giustificazioni').select('lezione_id,studente_id,stato').in('lezione_id', ids).eq('stato', 'accettata').order('id'))
+  ]);
+  const P = new Map(pre.map(p => [p.lezione_id + p.studente_id, p])), G = new Set(gi.map(g => g.lezione_id + g.studente_id));
+  const studs = isc.map(i => i.studenti).filter(Boolean).sort((a, b) => (a.cognome + a.nome).localeCompare(b.cognome + b.nome));
+  const head = ['Matricola', 'Cognome', 'Nome', ...lez.map(l => fmt(l.inizio)), 'Presenze', 'Giustificate', '% frequenza'];
+  const rows = studs.map(s => {
+    let p = 0, g = 0;
+    const celle = lez.map(l => {
+      const k = l.id + s.id, x = P.get(k);
+      if (x) { p++; return x.anomalia ? 'P*' : 'P'; }
+      if (G.has(k)) { g++; return 'G'; }
+      return 'A';
+    });
+    return [s.matricola, s.cognome, s.nome, ...celle, p, g, lez.length ? Math.round(100 * (p + g) / lez.length) : 0];
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...rows]), 'Riepilogo');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['P = presente', 'P* = presente da verificare', 'G = assenza giustificata', 'A = assente']]), 'Legenda');
+  XLSX.writeFile(wb, `riepilogo_${(l0.corsi?.nome || 'corso').replace(/\W+/g, '_')}.xlsx`);
+}
+
+/* ---------- ANOMALIE ---------- */
+async function tAnomalie() {
+  const rows = chk(await sb.from('anomalie').select('*').order('creato_il', { ascending: false }).limit(500));
+  const lab = { rete_non_ammessa: 'Rete non ammessa', dispositivo_condiviso: 'Stesso telefono di un altro studente' };
+  const txt = a => (a || '').split(',').map(x => lab[x] || x).join(' + ');
+  V.innerHTML = `<h2>Anomalie (ultime 500)</h2><p><button class="sec" onclick="xAnom()">Esporta Excel</button></p><div class="tab-wrap"><table>
+    <tr><th>Quando</th><th>Studente</th><th>Corso</th><th>Aula</th><th>Anomalia</th><th>IP</th></tr>
+    ${rows.map(r => `<tr><td>${fmt(r.creato_il)}</td><td>${esc(r.cognome)} ${esc(r.nome)} (${esc(r.matricola)})</td><td>${esc(r.corso)}</td><td>${esc(r.aula)}</td><td>${esc(txt(r.anomalia))}</td><td>${esc(r.ip)}</td></tr>`).join('') || '<tr><td colspan="6">Nessuna anomalia</td></tr>'}</table></div>`;
+  window.xAnom = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Quando', 'Matricola', 'Cognome', 'Nome', 'Corso', 'Aula', 'Anomalia', 'IP'],
+      ...rows.map(r => [fmt(r.creato_il), r.matricola, r.cognome, r.nome, r.corso, r.aula, txt(r.anomalia), r.ip])]), 'Anomalie');
+    XLSX.writeFile(wb, 'anomalie_presenze.xlsx');
+  };
+}
+
+/* ---------- GIUSTIFICAZIONI ---------- */
+async function tGiust() {
+  const rows = chk(await sb.from('giustificazioni').select('*, studenti(matricola,cognome,nome), lezioni(inizio, corsi(nome))').eq('stato', 'in_attesa').order('creato_il'));
+  V.innerHTML = `<h2>Giustificazioni in attesa</h2><div class="tab-wrap"><table><tr><th>Studente</th><th>Lezione</th><th>Motivo</th><th></th></tr>
+    ${rows.map(r => `<tr><td>${esc(r.studenti?.cognome)} ${esc(r.studenti?.nome)} (${esc(r.studenti?.matricola)})</td><td>${fmt(r.lezioni.inizio)} · ${esc(r.lezioni.corsi?.nome)}</td><td>${esc(r.motivo)}</td>
+    <td><button onclick="decidi('${r.id}','accettata')">Accetta</button> <button class="sec" onclick="decidi('${r.id}','rifiutata')">Rifiuta</button></td></tr>`).join('') || '<tr><td colspan="4">Nessuna giustificazione in attesa</td></tr>'}</table></div>`;
+}
+async function decidi(id, stato) { chk(await sb.from('giustificazioni').update({ stato }).eq('id', id)); tGiust(); }
+</script></body></html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Presenze</title>
+<link rel="stylesheet" href="stile.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script><script src="common.js"></script>
+</head><body><main id="app"><p>Caricamento…</p></main>
+<script>
+const app = $('#app');
+const deviceId = localStorage.getItem('dev') || (() => { const v = crypto.randomUUID(); localStorage.setItem('dev', v); return v; })();
+let codiceInAttesa = new URLSearchParams(location.search).get('c');
+let esito = '';
+
+avvia(app, async () => {
+  const r = await sb.rpc('collega_account');
+  if (r.error || !r.data?.ok) {
+    app.innerHTML = `<h1>Presenze</h1><div class="err">${esc(r.data?.errore || r.error?.message || 'Errore')}<br>Usa l'email con cui sei stato registrato dall'universita'.</div><p><a href="#" onclick="esci();return false">Esci</a></p>`;
+    return;
+  }
+  history.replaceState(null, '', location.pathname);
+  if (codiceInAttesa) { await registra(codiceInAttesa); codiceInAttesa = null; }
+  home();
+}, codiceInAttesa ? "Dopo l'accesso inquadra di nuovo il QR in aula (il codice dura pochi secondi)." : '');
+
+function estraiCodice(t) {
+  try { return new URL(t).searchParams.get('c') || t; } catch { return t; }
+}
+
+async function registra(codice) {
+  const { data, error } = await sb.rpc('registra_presenza', { p_codice: codice, p_device: deviceId });
+  if (error || !data) esito = `<div class="err">${esc(error?.message || 'Errore')}</div>`;
+  else if (!data.ok) esito = `<div class="err">${esc(data.errore)}</div>`;
+  else if (data.rete_ok) esito = `<div class="ok"><b>Presenza registrata ✔</b></div>`;
+  else esito = `<div class="warn"><b>Presenza registrata, ma da verificare.</b><br>Non risulti collegato alla rete Wi-Fi dell'aula. Se sei in aula, collegati al Wi-Fi e riprova; altrimenti la presenza sara' controllata dal docente.</div>`;
+}
+
+async function home() {
+  const me = (await sb.from('studenti').select('*').maybeSingle()).data;
+  app.innerHTML = `<h1>Presenze</h1><p class="muted">${esc(me.cognome)} ${esc(me.nome)} · matr. ${esc(me.matricola)}</p>
+    <div id="esito">${esito}</div>
+    <button class="big" id="scan">📷 Scansiona il QR in aula</button><div id="reader"></div>
+    <h2>Le mie presenze</h2><div id="lista" class="tab-wrap">…</div>
+    <h2>Assenze da giustificare</h2><div id="giust">…</div>
+    <p><a href="#" onclick="esci();return false">Esci</a></p>`;
+  esito = '';
+  $('#scan').onclick = scansiona;
+  elenco(); giustifica(me);
+}
+
+let scanner = null;
+async function scansiona() {
+  const box = $('#reader');
+  if (scanner) { try { await scanner.stop(); } catch {} scanner = null; box.innerHTML = ''; return; }
+  scanner = new Html5Qrcode('reader');
+  try {
+    await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 240 }, async testo => {
+      const codice = estraiCodice(testo);
+      try { await scanner.stop(); } catch {}
+      scanner = null; $('#reader').innerHTML = '';
+      await registra(codice); home();
+    });
+  } catch (e) {
+    scanner = null;
+    $('#esito').innerHTML = `<div class="err">Fotocamera non disponibile: ${esc(e.message || e)}. Consenti l'accesso alla fotocamera oppure inquadra il QR con l'app Fotocamera del telefono.</div>`;
+  }
+}
+
+async function elenco() {
+  const { data, error } = await sb.from('presenze')
+    .select('creato_il,rete_ok,anomalia,lezioni(inizio,tipo,corsi(nome),aule(nome))')
+    .order('creato_il', { ascending: false }).limit(20);
+  if (error) return $('#lista').innerHTML = `<div class="err">${esc(error.message)}</div>`;
+  $('#lista').innerHTML = data.length ? `<table><tr><th>Data</th><th>Corso</th><th>Aula</th><th>Esito</th></tr>` +
+    data.map(p => `<tr><td>${fmt(p.lezioni.inizio)}</td><td>${esc(p.lezioni.corsi?.nome)}</td><td>${esc(p.lezioni.aule?.nome)}</td><td>${p.anomalia ? 'Da verificare' : 'Registrata'}</td></tr>`).join('') + '</table>'
+    : '<p class="muted">Nessuna presenza registrata.</p>';
+}
+
+async function giustifica(me) {
+  const [L, P, G] = await Promise.all([
+    sb.from('lezioni').select('id,inizio,corsi(nome)').lt('inizio', new Date().toISOString()).eq('obbligatoria', true).order('inizio', { ascending: false }).limit(40),
+    sb.from('presenze').select('lezione_id'),
+    sb.from('giustificazioni').select('lezione_id,stato')
+  ]);
+  const pres = new Set((P.data || []).map(x => x.lezione_id));
+  const gm = new Map((G.data || []).map(x => [x.lezione_id, x.stato]));
+  const assenti = (L.data || []).filter(l => !pres.has(l.id));
+  const inviate = assenti.filter(l => gm.has(l.id));
+  const libere = assenti.filter(l => !gm.has(l.id));
+  const lab = { in_attesa: 'in attesa', accettata: 'accettata', rifiutata: 'rifiutata' };
+  let h = '';
+  if (inviate.length) h += '<table><tr><th>Lezione</th><th>Stato</th></tr>' + inviate.map(l => `<tr><td>${fmt(l.inizio)} · ${esc(l.corsi?.nome)}</td><td>${lab[gm.get(l.id)]}</td></tr>`).join('') + '</table>';
+  if (libere.length) h += `<div class="card"><div class="riga"><select id="gl">${libere.map(l => `<option value="${l.id}">${fmt(l.inizio)} · ${esc(l.corsi?.nome)}</option>`).join('')}</select></div>
+    <textarea id="gm" rows="3" placeholder="Motivo dell'assenza"></textarea><button id="gs">Invia giustificazione</button></div>`;
+  if (!h) h = '<p class="muted">Nessuna assenza da giustificare.</p>';
+  $('#giust').innerHTML = h;
+  if (libere.length) $('#gs').onclick = async () => {
+    const motivo = $('#gm').value.trim();
+    if (!motivo) return alert('Scrivi il motivo');
+    const { error } = await sb.from('giustificazioni').insert({ lezione_id: $('#gl').value, studente_id: me.id, motivo });
+    if (error) alert(error.message); else giustifica(me);
+  };
+}
+</script></body></html>
