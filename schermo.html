@@ -3,13 +3,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#093F31">
 <title>Schermo aula</title>
-<link rel="stylesheet" href="stile.css?v=2">
+<link rel="stylesheet" href="stile.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="config.js?v=2"></script><script src="common.js?v=2"></script>
 </head><body class="schermo"><header id="brand"></header>
 <div class="palco">
   <div>
+    <p class="aula" id="aula"></p>
     <h1 id="tit">Registra la tua presenza</h1>
     <p id="msg">Caricamento…</p>
     <ol class="passi" id="passi">
@@ -53,12 +54,20 @@ function stato(attiva, testo) {
   if (!attiva) $('#sub').textContent = '';
 }
 
+function intesta(d) {
+  const el = $('#aula');
+  if (!d || !d.aula) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<b>' + esc(d.aula) + '</b>' + (d.sede ? ' – ' + esc(d.sede) : '') + (d.corso ? '<small>' + esc(d.corso) + '</small>' : '');
+}
+
 async function tick() {
   if (inCorso) return; inCorso = true;
   try {
     if (!token) { stato(false, 'Link dello schermo non valido: manca il codice dell\'aula.'); return; }
     const { data, error } = await sb.rpc('codice_corrente', { p_token: token });
     if (error || !data) { stato(false, 'Connessione assente, riprovo…'); return; }
+    intesta(data);
     if (!data.attiva) {
       ultimo = null; rinnovo = null;
       stato(false, data.motivo === 'token_non_valido' ? 'Schermo non riconosciuto.' : 'Nessuna lezione in corso in quest\'aula.');
