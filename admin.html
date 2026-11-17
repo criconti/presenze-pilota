@@ -60,17 +60,43 @@ async function tAule() {
   await loadBase();
   V.innerHTML = `<h2>Sedi</h2>
     <form id="fs" class="riga"><input name="nome" placeholder="Nome sede" required><input name="indirizzo" placeholder="Indirizzo"><button>Aggiungi sede</button></form>
-    <p>${D.sedi.map(s => esc(s.nome)).join(' · ') || '<span class="muted">Nessuna sede</span>'}</p>
+    <div class="tab-wrap"><table><tr><th>Sede</th><th>Indirizzo</th><th></th></tr>
+    ${D.sedi.map(s => `<tr><td>${esc(s.nome)}</td><td>${esc(s.indirizzo)}</td><td><button class="sec" onclick="modSede('${s.id}')">Modifica</button> <button class="sec" onclick="delSede('${s.id}')">Elimina</button></td></tr>`).join('') || '<tr><td colspan="3" class="muted">Nessuna sede</td></tr>'}</table></div>
     <h2>Aule</h2>
     <form id="fa" class="riga"><select name="sede_id" required>${opt(D.sedi, s => s.nome)}</select><input name="nome" placeholder="Nome aula" required><input name="capienza" type="number" placeholder="Capienza"><button>Aggiungi aula</button></form>
     <p class="muted">Per registrare la rete di un'aula: collegati al suo Wi-Fi da questo pannello e premi "Usa la rete attuale". Se il Wi-Fi ha piu' uscite internet, ripetilo piu' volte.</p>
     <div class="tab-wrap"><table><tr><th>Sede</th><th>Aula</th><th>Reti ammesse</th><th>Azioni</th></tr>
-    ${D.aule.map(a => `<tr><td>${esc(a.sedi?.nome)}</td><td>${esc(a.nome)}</td>
+    ${D.aule.map(a => `<tr><td>${esc(a.sedi?.nome)}</td><td>${esc(a.nome)}${a.capienza ? '<br><small>capienza ' + esc(a.capienza) + '</small>' : ''}</td>
       <td>${(a.reti_ammesse || []).map(r => `${esc(r.ip_pubblico)} ${esc(r.etichetta || '')} <a href="#" onclick="delRete('${r.id}');return false">elimina</a>`).join('<br>') || '<span class="muted">nessuna</span>'}</td>
-      <td><button onclick="reteQui('${a.id}')">Usa la rete attuale</button><br><a href="schermo.html?t=${un(a.schermi)?.token}" target="_blank">Apri schermo aula</a></td></tr>`).join('')}
+      <td><button onclick="reteQui('${a.id}')">Usa la rete attuale</button><br><a href="schermo.html?t=${un(a.schermi)?.token}" target="_blank">Apri schermo aula</a><br><button class="sec" onclick="modAula('${a.id}')">Modifica</button> <button class="sec" onclick="delAula('${a.id}')">Elimina</button></td></tr>`).join('')}
     </table></div>`;
   $('#fs').onsubmit = async e => { e.preventDefault(); chk(await sb.from('sedi').insert(fd(e.target))); tAule(); };
   $('#fa').onsubmit = async e => { e.preventDefault(); chk(await sb.from('aule').insert(fd(e.target))); tAule(); };
+}
+const errFk = e => e.code === '23503' ? 'Non posso eliminarlo: ci sono lezioni collegate. Elimina prima quelle lezioni dalla scheda Lezioni.' : e.message;
+async function modSede(id) {
+  const s = D.sedi.find(x => x.id === id);
+  const nome = prompt('Nome della sede:', s.nome); if (nome === null || !nome.trim()) return;
+  const ind = prompt('Indirizzo:', s.indirizzo || ''); if (ind === null) return;
+  chk(await sb.from('sedi').update({ nome: nome.trim(), indirizzo: ind.trim() || null }).eq('id', id)); tAule();
+}
+async function delSede(id) {
+  const s = D.sedi.find(x => x.id === id), n = D.aule.filter(a => a.sede_id === id).length;
+  if (!confirm('Eliminare la sede "' + s.nome + '"' + (n ? ' e le sue ' + n + ' aule (con reti e schermo)' : '') + '? Non si può annullare.')) return;
+  const r = await sb.from('sedi').delete().eq('id', id);
+  if (r.error) return alert(errFk(r.error)); tAule();
+}
+async function modAula(id) {
+  const a = D.aule.find(x => x.id === id);
+  const nome = prompt("Nome dell'aula:", a.nome); if (nome === null || !nome.trim()) return;
+  const cap = prompt('Capienza (lascia vuoto se non serve):', a.capienza ?? ''); if (cap === null) return;
+  chk(await sb.from('aule').update({ nome: nome.trim(), capienza: cap.trim() ? parseInt(cap, 10) : null }).eq('id', id)); tAule();
+}
+async function delAula(id) {
+  const a = D.aule.find(x => x.id === id);
+  if (!confirm('Eliminare l\'aula "' + a.nome + '", con le sue reti registrate e lo schermo? Non si può annullare.')) return;
+  const r = await sb.from('aule').delete().eq('id', id);
+  if (r.error) return alert(errFk(r.error)); tAule();
 }
 async function reteQui(id) {
   const et = prompt('Nome per questa rete (es. "Wi-Fi Aula 3"):');
@@ -87,9 +113,23 @@ async function tCorsi() {
   const conta = await Promise.all(D.corsi.map(c => sb.from('iscrizioni').select('*', { count: 'exact', head: true }).eq('corso_id', c.id)));
   V.innerHTML = `<h2>Corsi</h2>
     <form id="fc" class="riga"><input name="codice" placeholder="Codice"><input name="nome" placeholder="Nome corso" required><input name="docente" placeholder="Docente"><input name="anno_accademico" placeholder="A.A. (es. 2026/27)"><button>Aggiungi corso</button></form>
-    <div class="tab-wrap"><table><tr><th>Codice</th><th>Corso</th><th>Docente</th><th>A.A.</th><th>Iscritti</th></tr>
-    ${D.corsi.map((c, i) => `<tr><td>${esc(c.codice)}</td><td>${esc(c.nome)}</td><td>${esc(c.docente)}</td><td>${esc(c.anno_accademico)}</td><td>${conta[i].count ?? 0}</td></tr>`).join('')}</table></div>`;
+    <div class="tab-wrap"><table><tr><th>Codice</th><th>Corso</th><th>Docente</th><th>A.A.</th><th>Iscritti</th><th></th></tr>
+    ${D.corsi.map((c, i) => `<tr><td>${esc(c.codice)}</td><td>${esc(c.nome)}</td><td>${esc(c.docente)}</td><td>${esc(c.anno_accademico)}</td><td>${conta[i].count ?? 0}</td><td><button class="sec" onclick="modCorso('${c.id}')">Modifica</button> <button class="sec" onclick="delCorso('${c.id}')">Elimina</button></td></tr>`).join('')}</table></div>`;
   $('#fc').onsubmit = async e => { e.preventDefault(); chk(await sb.from('corsi').insert(fd(e.target))); tCorsi(); };
+}
+
+async function modCorso(id) {
+  const c = D.corsi.find(x => x.id === id);
+  const nome = prompt('Nome del corso:', c.nome); if (nome === null || !nome.trim()) return;
+  const codice = prompt('Codice:', c.codice || ''); if (codice === null) return;
+  const docente = prompt('Docente:', c.docente || ''); if (docente === null) return;
+  const aa = prompt('Anno accademico:', c.anno_accademico || ''); if (aa === null) return;
+  chk(await sb.from('corsi').update({ nome: nome.trim(), codice: codice.trim() || null, docente: docente.trim() || null, anno_accademico: aa.trim() || null }).eq('id', id)); tCorsi();
+}
+async function delCorso(id) {
+  const c = D.corsi.find(x => x.id === id), n = D.lezioni.filter(l => l.corso_id === id).length;
+  if (!confirm('Eliminare il corso "' + c.nome + '"?\nVerranno eliminate anche le sue ' + n + ' lezioni, tutte le presenze e le iscrizioni. Non si può annullare.')) return;
+  chk(await sb.from('corsi').delete().eq('id', id)); tCorsi();
 }
 
 /* ---------- STUDENTI ---------- */
