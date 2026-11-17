@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Presenze · Admin</title>
 <meta name="theme-color" content="#0E5A45">
-<link rel="stylesheet" href="stile.css?v=4">
+<link rel="stylesheet" href="stile.css?v=5">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="config.js?v=2"></script><script src="common.js?v=2"></script>
@@ -68,14 +68,14 @@ async function tAule() {
   V.innerHTML = `<h2>Sedi</h2>
     <form id="fs" class="riga"><input name="nome" placeholder="Nome sede" required><input name="indirizzo" placeholder="Indirizzo"><button>Aggiungi sede</button></form>
     <div class="tab-wrap"><table><tr><th>Sede</th><th>Indirizzo</th><th></th></tr>
-    ${D.sedi.map(s => `<tr><td>${esc(s.nome)}</td><td>${esc(s.indirizzo)}</td><td><button class="sec" onclick="modSede('${s.id}')">Modifica</button> <button class="sec" onclick="delSede('${s.id}')">Elimina</button></td></tr>`).join('') || '<tr><td colspan="3" class="muted">Nessuna sede</td></tr>'}</table></div>
+    ${D.sedi.map(s => `<tr><td>${esc(s.nome)}</td><td>${esc(s.indirizzo)}</td><td><button class="pic" onclick="modSede('${s.id}')">Modifica</button> <button class="pic pe" onclick="delSede('${s.id}')">Elimina</button></td></tr>`).join('') || '<tr><td colspan="3" class="muted">Nessuna sede</td></tr>'}</table></div>
     <h2>Aule</h2>
     <form id="fa" class="riga"><select name="sede_id" required>${opt(D.sedi, s => s.nome)}</select><input name="nome" placeholder="Nome aula" required><input name="capienza" type="number" placeholder="Capienza"><button>Aggiungi aula</button></form>
     <p class="muted">Per registrare la rete di un'aula: collegati al suo Wi-Fi da questo pannello e premi "Usa la rete attuale". Se il Wi-Fi ha piu' uscite internet, ripetilo piu' volte.</p>
     <div class="tab-wrap"><table><tr><th>Sede</th><th>Aula</th><th>Reti ammesse</th><th>Azioni</th></tr>
     ${D.aule.map(a => `<tr><td>${esc(a.sedi?.nome)}</td><td>${esc(a.nome)}${a.capienza ? '<br><small>capienza ' + esc(a.capienza) + '</small>' : ''}</td>
-      <td>${(a.reti_ammesse || []).map(r => `${esc(r.ip_pubblico)} ${esc(r.etichetta || '')} <a href="#" onclick="delRete('${r.id}');return false">elimina</a>`).join('<br>') || '<span class="muted">nessuna</span>'}</td>
-      <td><button onclick="reteQui('${a.id}')">Usa la rete attuale</button><br><a href="schermo.html?t=${un(a.schermi)?.token}" target="_blank">Apri schermo aula</a><br><button class="sec" onclick="modAula('${a.id}')">Modifica</button> <button class="sec" onclick="delAula('${a.id}')">Elimina</button></td></tr>`).join('')}
+      <td>${(a.reti_ammesse || []).map(r => `${esc(r.ip_pubblico)} ${esc(r.etichetta || '')} <button class="pic pe" onclick="delRete('${r.id}')">Rimuovi rete</button>`).join('<br>') || '<span class="muted">nessuna</span>'}</td>
+      <td><button class="pic pri" onclick="reteQui('${a.id}')">Usa la rete attuale</button><a class="pic" href="schermo.html?t=${un(a.schermi)?.token}" target="_blank">Apri schermo</a><button class="pic" onclick="modAula('${a.id}')">Modifica</button> <button class="pic pe" onclick="delAula('${a.id}')">Elimina</button></td></tr>`).join('')}
     </table></div>`;
   $('#fs').onsubmit = async e => { e.preventDefault(); chk(await sb.from('sedi').insert(fd(e.target))); tAule(); };
   $('#fa').onsubmit = async e => { e.preventDefault(); chk(await sb.from('aule').insert(fd(e.target))); tAule(); };
@@ -121,7 +121,7 @@ async function tCorsi() {
   V.innerHTML = `<h2>Corsi</h2>
     <form id="fc" class="riga"><input name="codice" placeholder="Codice"><input name="nome" placeholder="Nome corso" required><input name="docente" placeholder="Docente"><input name="anno_accademico" placeholder="A.A. (es. 2026/27)"><button>Aggiungi corso</button></form>
     <div class="tab-wrap"><table><tr><th>Codice</th><th>Corso</th><th>Docente</th><th>A.A.</th><th>Iscritti</th><th></th></tr>
-    ${D.corsi.map((c, i) => `<tr><td>${esc(c.codice)}</td><td>${esc(c.nome)}</td><td>${esc(c.docente)}</td><td>${esc(c.anno_accademico)}</td><td>${conta[i].count ?? 0}</td><td><button class="sec" onclick="modCorso('${c.id}')">Modifica</button> <button class="sec" onclick="delCorso('${c.id}')">Elimina</button></td></tr>`).join('')}</table></div>`;
+    ${D.corsi.map((c, i) => `<tr><td>${esc(c.codice)}</td><td>${esc(c.nome)}</td><td>${esc(c.docente)}</td><td>${esc(c.anno_accademico)}</td><td>${conta[i].count ?? 0}</td><td><button class="pic" onclick="modCorso('${c.id}')">Modifica</button> <button class="pic pe" onclick="delCorso('${c.id}')">Elimina</button></td></tr>`).join('')}</table></div>`;
   $('#fc').onsubmit = async e => { e.preventDefault(); chk(await sb.from('corsi').insert(fd(e.target))); tCorsi(); };
 }
 
@@ -159,7 +159,7 @@ function elencoStud() {
   const f = q ? S.filter(x => [x.matricola, x.cognome, x.nome, x.email].join(' ').toLowerCase().includes(q)) : S;
   $('#elenco').innerHTML = `<div class="tab-wrap"><table><tr><th>Matricola</th><th>Cognome</th><th>Nome</th><th>Email</th><th>Accesso</th><th></th></tr>
     ${f.slice(0, 100).map(x => `<tr><td>${esc(x.matricola)}</td><td>${esc(x.cognome)}</td><td>${esc(x.nome)}</td><td>${esc(x.email)}</td><td>${x.user_id ? 'effettuato' : '-'}</td>
-    <td><button class="sec" onclick="modStud('${x.id}')">Modifica</button> <button class="sec" onclick="delStud('${x.id}')">Elimina</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nessuno studente</td></tr>'}</table></div>
+    <td><button class="pic" onclick="modStud('${x.id}')">Modifica</button> <button class="pic pe" onclick="delStud('${x.id}')">Elimina</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nessuno studente</td></tr>'}</table></div>
     <p class="muted">${f.length > 100 ? 'Mostrati i primi 100 di ' + f.length + ': affina la ricerca.' : f.length + ' studenti'}</p>`;
 }
 async function modStud(id) {
@@ -232,7 +232,7 @@ async function tAdmin() {
     <p>Chi e' qui puo' vedere e modificare tutto. Per aggiungere un collega: 1) deve aprire questa pagina e accedere con la sua email (vedra' "Accesso non abilitato", e' normale); 2) tu scrivi qui la sua email.</p>
     <form id="fadm" class="riga"><input name="email" type="email" placeholder="email.collega@unito.it" required><button>Aggiungi amministratore</button></form>
     <div class="tab-wrap"><table><tr><th>Email</th><th></th></tr>
-    ${r.data.map(a => `<tr><td>${esc(a.email)}</td><td><button class="sec" onclick="delAdmin('${a.user_id}','${esc(a.email)}')">Rimuovi</button></td></tr>`).join('')}</table></div>`;
+    ${r.data.map(a => `<tr><td>${esc(a.email)}</td><td><button class="pic pe" onclick="delAdmin('${a.user_id}','${esc(a.email)}')">Rimuovi</button></td></tr>`).join('')}</table></div>`;
   $('#fadm').onsubmit = async e => {
     e.preventDefault();
     const x = await sb.rpc('aggiungi_admin', { p_email: new FormData(e.target).get('email') });
@@ -259,7 +259,7 @@ async function tLezioni() {
     <div class="riga"><label>Inizio <input type="datetime-local" name="inizio" required></label><label>Fine <input type="datetime-local" name="fine" required></label>
     <label>Ripeti ogni settimana per <input type="number" name="n" value="1" min="1" max="30" style="width:70px"> volte</label><button>Crea</button></div></form>
     <div class="tab-wrap"><table><tr><th>Stato</th><th>Data</th><th>Fine</th><th>Corso</th><th>Aula</th><th>Tipo</th><th></th></tr>
-    ${D.lezioni.map(l => `<tr><td>${chipLez(l)}</td><td>${fmt(l.inizio)}</td><td>${fmt(l.fine)}</td><td>${esc(l.corsi?.nome)}</td><td>${esc(l.aule?.nome)}</td><td>${l.tipo}${l.obbligatoria ? '' : ' (facolt.)'}</td><td><a href="#" onclick="delLez('${l.id}');return false">elimina</a></td></tr>`).join('')}</table></div>`;
+    ${D.lezioni.map(l => `<tr><td>${chipLez(l)}</td><td>${fmt(l.inizio)}</td><td>${fmt(l.fine)}</td><td>${esc(l.corsi?.nome)}</td><td>${esc(l.aule?.nome)}</td><td>${l.tipo}${l.obbligatoria ? '' : ' (facolt.)'}</td><td><button class="pic pe" onclick="delLez('${l.id}')">Elimina</button></td></tr>`).join('')}</table></div>`;
   $('#fl').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), n = Math.max(1, +f.get('n') || 1), rows = [];
@@ -310,7 +310,7 @@ async function mostra() {
     ULT.righe.map((r, k) => `<tr>${r.map((c, i) => `<td>${i === 3 ? chip(c) : esc(c)}</td>`).join('')}<td>${azione(r, k)}</td></tr>`).join('') + '</table></div>';
 }
 const azione = (r, k) => (r[3].startsWith('Presente') && !r[3].includes('verificare')) ? '' :
-  `<button class="sec" onclick="segna('${ULT.l.id}','${ULT.sid[k]}')">${r[3].includes('verificare') ? 'Conferma presenza' : 'Segna presente'}</button>`;
+  `<button class="pic" onclick="segna('${ULT.l.id}','${ULT.sid[k]}')">${r[3].includes('verificare') ? 'Conferma presenza' : 'Segna presente'}</button>`;
 async function segna(lez, stud) {
   if (!confirm('Segnare presente questo studente? Resta annotato come "inserita dal docente".')) return;
   chk(await sb.from('presenze').upsert({ lezione_id: lez, studente_id: stud, manuale: true, anomalia: null, rete_ok: false }, { onConflict: 'lezione_id,studente_id' }));
@@ -398,7 +398,7 @@ async function tGiust() {
   const rows = chk(await sb.from('giustificazioni').select('*, studenti(matricola,cognome,nome), lezioni(inizio, corsi(nome))').eq('stato', 'in_attesa').order('creato_il'));
   V.innerHTML = `<h2>Giustificazioni in attesa</h2><div class="tab-wrap"><table><tr><th>Studente</th><th>Lezione</th><th>Motivo</th><th></th></tr>
     ${rows.map(r => `<tr><td>${esc(r.studenti?.cognome)} ${esc(r.studenti?.nome)} (${esc(r.studenti?.matricola)})</td><td>${fmt(r.lezioni.inizio)} · ${esc(r.lezioni.corsi?.nome)}</td><td>${esc(r.motivo)}</td>
-    <td><button onclick="decidi('${r.id}','accettata')">Accetta</button> <button class="sec" onclick="decidi('${r.id}','rifiutata')">Rifiuta</button></td></tr>`).join('') || '<tr><td colspan="4">Nessuna giustificazione in attesa</td></tr>'}</table></div>`;
+    <td><button class="pic pri" onclick="decidi('${r.id}','accettata')">Accetta</button> <button class="pic pe" onclick="decidi('${r.id}','rifiutata')">Rifiuta</button></td></tr>`).join('') || '<tr><td colspan="4">Nessuna giustificazione in attesa</td></tr>'}</table></div>`;
 }
 async function decidi(id, stato) { chk(await sb.from('giustificazioni').update({ stato }).eq('id', id)); tGiust(); }
 </script></body></html>
