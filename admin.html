@@ -155,6 +155,19 @@ async function importa() {
   $('#ris').innerHTML = 'Importazione in corso…';
   const ids = [];
   try {
+    // email gia' presente con un'altra matricola: aggiorno quello studente (mantiene account e presenze)
+    const perEmail = new Map(rows.map(r => [r.email, r]));
+    const da = [...perEmail.keys()], daFare = [];
+    for (let i = 0; i < da.length; i += 100) {
+      const r = await sb.from('studenti').select('id,matricola,email').in('email', da.slice(i, i + 100));
+      if (r.error) throw r.error;
+      r.data.forEach(x => { const n = perEmail.get(x.email); if (n && n.matricola !== x.matricola) daFare.push({ id: x.id, n }); });
+    }
+    for (const { id, n } of daFare) {
+      const r = await sb.from('studenti').update({ matricola: n.matricola, cognome: n.cognome, nome: n.nome }).eq('id', id);
+      if (r.error) throw r.error;
+      ids.push(id); rows.splice(rows.indexOf(n), 1);
+    }
     for (let i = 0; i < rows.length; i += 300) {
       const r = await sb.from('studenti').upsert(rows.slice(i, i + 300), { onConflict: 'matricola' }).select('id');
       if (r.error) throw r.error;
@@ -166,7 +179,7 @@ async function importa() {
     }
     $('#ris').innerHTML = `<div class="ok">Importati e iscritti <b>${ids.length}</b> studenti.</div>`;
   } catch (e) {
-    $('#ris').innerHTML = `<div class="err">${esc(e.message)}<br><small>Controlla che non ci siano email ripetute con matricole diverse.</small></div>`;
+    $('#ris').innerHTML = `<div class="err">${esc(e.message)}<br><small>Controlla che non ci siano due righe con la stessa email o la stessa matricola.</small></div>`;
   }
 }
 
