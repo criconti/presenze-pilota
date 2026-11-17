@@ -38,6 +38,8 @@ const fd = form => Object.fromEntries([...new FormData(form)].map(([k, v]) => [k
 const un = x => [].concat(x || [])[0];
 const ETANOM = { rete_non_ammessa: 'Rete non ammessa', dispositivo_condiviso: 'Stesso telefono di un altro studente' };
 const etAnom = a => (a || '').split(',').map(x => ETANOM[x] || x).join(' + ');
+const statoLez = l => { const n = Date.now(), i = new Date(l.inizio).getTime(), f = new Date(l.fine).getTime(); return n > f ? ['Terminata', 'neu'] : n >= i ? ['In corso', 'ok'] : ['In programma', 'warn']; };
+const chipLez = l => { const [t, c] = statoLez(l); return `<span class="chip ${c}">${t}</span>`; };
 const chip = s => `<span class="chip ${s.includes('verificare') ? 'warn' : s.startsWith('Presente') ? 'ok' : s.includes('giustificato') ? 'neu' : 'no'}">${esc(s)}</span>`;
 
 async function loadBase() {
@@ -177,8 +179,8 @@ async function tLezioni() {
     <label><input type="checkbox" name="obbligatoria" checked> Obbligatoria</label></div>
     <div class="riga"><label>Inizio <input type="datetime-local" name="inizio" required></label><label>Fine <input type="datetime-local" name="fine" required></label>
     <label>Ripeti ogni settimana per <input type="number" name="n" value="1" min="1" max="30" style="width:70px"> volte</label><button>Crea</button></div></form>
-    <div class="tab-wrap"><table><tr><th>Data</th><th>Fine</th><th>Corso</th><th>Aula</th><th>Tipo</th><th></th></tr>
-    ${D.lezioni.map(l => `<tr><td>${fmt(l.inizio)}</td><td>${fmt(l.fine)}</td><td>${esc(l.corsi?.nome)}</td><td>${esc(l.aule?.nome)}</td><td>${l.tipo}${l.obbligatoria ? '' : ' (facolt.)'}</td><td><a href="#" onclick="delLez('${l.id}');return false">elimina</a></td></tr>`).join('')}</table></div>`;
+    <div class="tab-wrap"><table><tr><th>Stato</th><th>Data</th><th>Fine</th><th>Corso</th><th>Aula</th><th>Tipo</th><th></th></tr>
+    ${D.lezioni.map(l => `<tr><td>${chipLez(l)}</td><td>${fmt(l.inizio)}</td><td>${fmt(l.fine)}</td><td>${esc(l.corsi?.nome)}</td><td>${esc(l.aule?.nome)}</td><td>${l.tipo}${l.obbligatoria ? '' : ' (facolt.)'}</td><td><a href="#" onclick="delLez('${l.id}');return false">elimina</a></td></tr>`).join('')}</table></div>`;
   $('#fl').onsubmit = async e => {
     e.preventDefault();
     const f = new FormData(e.target), n = Math.max(1, +f.get('n') || 1), rows = [];
@@ -196,7 +198,7 @@ async function delLez(id) { if (confirm('Eliminare la lezione e le sue presenze?
 let ULT = null;
 async function tPresenze() {
   await loadBase();
-  V.innerHTML = `<h2>Presenze</h2><div class="riga"><select id="pl">${D.lezioni.map(l => `<option value="${l.id}">${fmt(l.inizio)} · ${esc(l.corsi?.nome)} · ${esc(l.aule?.nome)}</option>`).join('')}</select>
+  V.innerHTML = `<h2>Presenze</h2><div class="riga"><select id="pl">${D.lezioni.map(l => `<option value="${l.id}">${statoLez(l)[0] === 'Terminata' ? '[Terminata] ' : ''}${fmt(l.inizio)} · ${esc(l.corsi?.nome)} · ${esc(l.aule?.nome)}</option>`).join('')}</select>
     <button onclick="mostra()">Mostra</button><button class="sec" onclick="xLezione()">Excel lezione</button><button class="sec" onclick="xCorso()">Excel corso intero</button></div><div id="pt"></div>`;
   if (D.lezioni.length) mostra();
 }
