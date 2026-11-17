@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Presenze · Admin</title>
 <meta name="theme-color" content="#0E5A45">
-<link rel="stylesheet" href="stile.css?v=2">
+<link rel="stylesheet" href="stile.css?v=4">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="config.js?v=2"></script><script src="common.js?v=2"></script>
@@ -19,16 +19,21 @@ avvia(app, async () => {
     app.innerHTML = `<h1>Accesso non abilitato</h1><div class="err">Questo account non e' abilitato come amministratore.</div><p><a href="#" onclick="esci();return false">Esci</a></p>`;
     return;
   }
-  app.innerHTML = `<div class="shell"><nav>${[['aule','Sedi e aule'],['corsi','Corsi'],['studenti','Studenti'],['lezioni','Lezioni'],['presenze','Presenze'],['anomalie','Anomalie'],['giust','Giustificazioni'],['impost','Impostazioni']]
+  app.innerHTML = `<div class="shell"><button id="burger" class="sec" aria-expanded="false" aria-controls="menu" onclick="menu()"><span class="ham" aria-hidden="true"></span><span id="voce">Menu</span></button><nav id="menu">${[['aule','Sedi e aule'],['corsi','Corsi'],['studenti','Studenti'],['lezioni','Lezioni'],['presenze','Presenze'],['anomalie','Anomalie'],['giust','Giustificazioni'],['admin','Amministratori'],['impost','Impostazioni']]
       .map(([k, n]) => `<button data-t="${k}" onclick="nav('${k}')">${n}</button>`).join('')}
       <button class="sec" onclick="esci()">Esci</button></nav><div id="view"></div></div>`;
   V = $('#view');
   nav('aule');
 });
 
-const TABS = { aule: tAule, corsi: tCorsi, studenti: tStudenti, lezioni: tLezioni, presenze: tPresenze, anomalie: tAnomalie, giust: tGiust, impost: tImpost };
+const TABS = { aule: tAule, corsi: tCorsi, studenti: tStudenti, lezioni: tLezioni, presenze: tPresenze, anomalie: tAnomalie, giust: tGiust, admin: tAdmin, impost: tImpost };
+function menu(apri) {
+  const n = $('#menu'), o = typeof apri === 'boolean' ? apri : !n.classList.contains('aperto');
+  n.classList.toggle('aperto', o); $('#burger').setAttribute('aria-expanded', o);
+}
 function nav(t) {
-  document.querySelectorAll('nav button[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  document.querySelectorAll('nav button[data-t]').forEach(b => { const on = b.dataset.t === t; b.classList.toggle('on', on); if (on) $('#voce').textContent = b.textContent; });
+  menu(false);
   V.innerHTML = '<p>Caricamento…</p>';
   TABS[t]().catch(e => { V.innerHTML = `<div class="err">${esc(e.message || e)}</div>`; });
 }
@@ -138,36 +143,70 @@ async function delCorso(id) {
 async function tStudenti() {
   await loadBase();
   V.innerHTML = `<h2>Importa studenti</h2>
-    <p>Una riga per studente: <code>matricola ; cognome ; nome ; email</code>. Da Excel: copia le 4 colonne e incollale qui sotto, oppure carica un file .csv. Gli studenti vengono iscritti al corso scelto.</p>
+    <p>Una riga per studente, dall'elenco ufficiale: <code>matricola ; cognome ; nome ; email</code>. Da Excel: copia le 4 colonne e incollale qui sotto, oppure carica un file .csv. Gli studenti vengono iscritti al corso scelto. La matricola identifica la persona: se una riga contraddice uno studente gia' presente, non viene importata e te lo segnalo.</p>
     <div class="riga"><select id="ic">${opt(D.corsi, c => c.nome)}</select><input type="file" id="f" accept=".csv,.txt"></div>
-    <textarea id="t" rows="10" placeholder="123456;Rossi;Mario;mario.rossi@studenti.unito.it"></textarea>
-    <p><button onclick="importa()">Importa e iscrivi</button></p><div id="ris"></div>`;
+    <textarea id="t" rows="8" placeholder="123456;Rossi;Mario;mario.rossi@studenti.unito.it"></textarea>
+    <p><button onclick="importa()">Importa e iscrivi</button></p><div id="ris"></div>
+    <h2>Elenco studenti</h2>
+    <div class="riga"><input id="cerca" type="search" placeholder="Cerca per cognome, nome, matricola o email" oninput="elencoStud()"></div><div id="elenco">Caricamento…</div>`;
   $('#f').onchange = async e => { $('#t').value = await e.target.files[0].text(); };
+  S = await all(() => sb.from('studenti').select('id,matricola,cognome,nome,email,user_id').order('cognome').order('id'));
+  elencoStud();
 }
+let S = [];
+function elencoStud() {
+  const q = ($('#cerca')?.value || '').toLowerCase().trim();
+  const f = q ? S.filter(x => [x.matricola, x.cognome, x.nome, x.email].join(' ').toLowerCase().includes(q)) : S;
+  $('#elenco').innerHTML = `<div class="tab-wrap"><table><tr><th>Matricola</th><th>Cognome</th><th>Nome</th><th>Email</th><th>Accesso</th><th></th></tr>
+    ${f.slice(0, 100).map(x => `<tr><td>${esc(x.matricola)}</td><td>${esc(x.cognome)}</td><td>${esc(x.nome)}</td><td>${esc(x.email)}</td><td>${x.user_id ? 'effettuato' : '-'}</td>
+    <td><button class="sec" onclick="modStud('${x.id}')">Modifica</button> <button class="sec" onclick="delStud('${x.id}')">Elimina</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nessuno studente</td></tr>'}</table></div>
+    <p class="muted">${f.length > 100 ? 'Mostrati i primi 100 di ' + f.length + ': affina la ricerca.' : f.length + ' studenti'}</p>`;
+}
+async function modStud(id) {
+  const x = S.find(y => y.id === id), v = [];
+  for (const [k, t] of [['matricola', 'Matricola'], ['cognome', 'Cognome'], ['nome', 'Nome'], ['email', 'Email']]) {
+    const r = prompt(t + ':', x[k] || ''); if (r === null) return; v.push(r.trim());
+  }
+  if (v.some(a => !a)) return alert('Compila tutti i campi.');
+  const r = await sb.from('studenti').update({ matricola: v[0], cognome: v[1], nome: v[2], email: v[3].toLowerCase() }).eq('id', id);
+  if (r.error) return alert(r.error.code === '23505' ? 'Esiste gia\' un altro studente con la stessa matricola o la stessa email.' : r.error.message);
+  tStudenti();
+}
+async function delStud(id) {
+  const x = S.find(y => y.id === id);
+  if (!confirm('Eliminare ' + x.cognome + ' ' + x.nome + ' (' + x.matricola + ')?\nVerranno eliminate anche le sue iscrizioni e presenze. Non si può annullare.')) return;
+  const r = await sb.from('studenti').delete().eq('id', id);
+  if (r.error) return alert(r.error.message);
+  tStudenti();
+}
+const norm = t => (t || '').toLowerCase().replace(/\s+/g, ' ').trim();
 async function importa() {
   const corso = $('#ic').value;
   if (!corso) return alert('Crea prima un corso');
   const righe = $('#t').value.split(/\r?\n/).map(l => l.split(/[;\t,]/).map(x => x.trim())).filter(r => r.length >= 4 && r[0]);
   if (righe.length && /matricola/i.test(righe[0][0])) righe.shift();
-  const mappa = new Map(righe.map(r => [r[0], { matricola: r[0], cognome: r[1], nome: r[2], email: r[3].toLowerCase() }]));
-  const rows = [...mappa.values()];
-  if (!rows.length) return alert('Nessuna riga valida');
+  if (!righe.length) return alert('Nessuna riga valida');
   $('#ris').innerHTML = 'Importazione in corso…';
-  const ids = [];
+  const conflitti = [], rows = [], viste = new Set(), emailViste = new Set();
   try {
-    // email gia' presente con un'altra matricola: aggiorno quello studente (mantiene account e presenze)
-    const perEmail = new Map(rows.map(r => [r.email, r]));
-    const da = [...perEmail.keys()], daFare = [];
-    for (let i = 0; i < da.length; i += 100) {
-      const r = await sb.from('studenti').select('id,matricola,email').in('email', da.slice(i, i + 100));
-      if (r.error) throw r.error;
-      r.data.forEach(x => { const n = perEmail.get(x.email); if (n && n.matricola !== x.matricola) daFare.push({ id: x.id, n }); });
+    const cand = righe.map(r => ({ matricola: r[0], cognome: r[1], nome: r[2], email: r[3].toLowerCase() }));
+    const exM = new Map(), exE = new Map();
+    for (let i = 0; i < cand.length; i += 100) {
+      const ch = cand.slice(i, i + 100);
+      const [a, b] = await Promise.all([
+        sb.from('studenti').select('id,matricola,cognome,nome,email').in('matricola', ch.map(x => x.matricola)),
+        sb.from('studenti').select('id,matricola,cognome,nome,email').in('email', ch.map(x => x.email))]);
+      if (a.error) throw a.error; if (b.error) throw b.error;
+      a.data.forEach(x => exM.set(x.matricola, x)); b.data.forEach(x => exE.set(x.email, x));
     }
-    for (const { id, n } of daFare) {
-      const r = await sb.from('studenti').update({ matricola: n.matricola, cognome: n.cognome, nome: n.nome }).eq('id', id);
-      if (r.error) throw r.error;
-      ids.push(id); rows.splice(rows.indexOf(n), 1);
+    for (const r of cand) {
+      const m = exM.get(r.matricola), e = exE.get(r.email);
+      if (viste.has(r.matricola) || emailViste.has(r.email)) { conflitti.push(`${r.matricola} ${r.cognome} ${r.nome}: matricola o email ripetuta nell'elenco`); continue; }
+      if (m && (norm(m.cognome) !== norm(r.cognome) || norm(m.nome) !== norm(r.nome))) { conflitti.push(`${r.matricola}: nel sistema c'e' gia' ${m.cognome} ${m.nome}, nell'elenco ${r.cognome} ${r.nome}`); continue; }
+      if (e && e.matricola !== r.matricola) { conflitti.push(`${r.matricola} ${r.cognome} ${r.nome}: l'email ${r.email} e' gia' di ${e.cognome} ${e.nome} (matricola ${e.matricola})`); continue; }
+      viste.add(r.matricola); emailViste.add(r.email); rows.push(r);
     }
+    const ids = [];
     for (let i = 0; i < rows.length; i += 300) {
       const r = await sb.from('studenti').upsert(rows.slice(i, i + 300), { onConflict: 'matricola' }).select('id');
       if (r.error) throw r.error;
@@ -177,10 +216,37 @@ async function importa() {
       const r = await sb.from('iscrizioni').upsert(ids.slice(i, i + 500).map(id => ({ corso_id: corso, studente_id: id })), { onConflict: 'corso_id,studente_id' });
       if (r.error) throw r.error;
     }
-    $('#ris').innerHTML = `<div class="ok">Importati e iscritti <b>${ids.length}</b> studenti.</div>`;
+    $('#ris').innerHTML = (ids.length ? `<div class="ok">Importati e iscritti <b>${ids.length}</b> studenti.</div>` : '')
+      + (conflitti.length ? `<div class="warnbox"><b>${conflitti.length} righe NON importate</b> (dati in contrasto con quelli gia' presenti):<br>${conflitti.slice(0, 50).map(esc).join('<br>')}<br><small>Controlla l'elenco ufficiale; se il dato nel sistema e' sbagliato correggilo con Modifica nell'elenco qui sotto, poi reimporta.</small></div>` : '');
+    S = await all(() => sb.from('studenti').select('id,matricola,cognome,nome,email,user_id').order('cognome').order('id')); elencoStud();
   } catch (e) {
-    $('#ris').innerHTML = `<div class="err">${esc(e.message)}<br><small>Controlla che non ci siano due righe con la stessa email o la stessa matricola.</small></div>`;
+    $('#ris').innerHTML = `<div class="err">${esc(e.message)}</div>`;
   }
+}
+
+/* ---------- AMMINISTRATORI ---------- */
+async function tAdmin() {
+  const r = await sb.rpc('elenco_admin');
+  if (r.error) { V.innerHTML = `<div class="err">${esc(r.error.message)}<br><small>Hai eseguito lo script aggiornamento_04.sql in Supabase?</small></div>`; return; }
+  V.innerHTML = `<h2>Amministratori</h2>
+    <p>Chi e' qui puo' vedere e modificare tutto. Per aggiungere un collega: 1) deve aprire questa pagina e accedere con la sua email (vedra' "Accesso non abilitato", e' normale); 2) tu scrivi qui la sua email.</p>
+    <form id="fadm" class="riga"><input name="email" type="email" placeholder="email.collega@unito.it" required><button>Aggiungi amministratore</button></form>
+    <div class="tab-wrap"><table><tr><th>Email</th><th></th></tr>
+    ${r.data.map(a => `<tr><td>${esc(a.email)}</td><td><button class="sec" onclick="delAdmin('${a.user_id}','${esc(a.email)}')">Rimuovi</button></td></tr>`).join('')}</table></div>`;
+  $('#fadm').onsubmit = async e => {
+    e.preventDefault();
+    const x = await sb.rpc('aggiungi_admin', { p_email: new FormData(e.target).get('email') });
+    if (x.error) return alert('Errore: ' + x.error.message);
+    if (!x.data.ok) return alert(x.data.errore);
+    tAdmin();
+  };
+}
+async function delAdmin(id, email) {
+  if (!confirm('Togliere i permessi di amministratore a ' + email + '?')) return;
+  const x = await sb.rpc('rimuovi_admin', { p_user: id });
+  if (x.error) return alert('Errore: ' + x.error.message);
+  if (!x.data.ok) return alert(x.data.errore);
+  tAdmin();
 }
 
 /* ---------- LEZIONI ---------- */
