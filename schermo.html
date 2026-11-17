@@ -1,53 +1,78 @@
 <!DOCTYPE html>
 <html lang="it"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#093F31">
 <title>Schermo aula</title>
-<link rel="stylesheet" href="stile.css">
+<link rel="stylesheet" href="stile.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-<script src="config.js"></script><script src="common.js"></script>
-<style>#qr{background:#fff;padding:14px;border-radius:12px;display:none;line-height:0}#qr svg{display:block}</style>
-</head><body class="schermo">
-<h1 id="tit">Registra la tua presenza</h1>
-<div id="qr"></div>
-<p id="msg" style="font-size:1.2rem">Caricamento…</p>
-<p id="sub" style="color:#9fb4c8"></p>
+<script src="config.js?v=2"></script><script src="common.js?v=2"></script>
+</head><body class="schermo"><header id="brand"></header>
+<div class="palco">
+  <div>
+    <h1 id="tit">Registra la tua presenza</h1>
+    <p id="msg">Caricamento…</p>
+    <ol class="passi" id="passi">
+      <li>Collegati al Wi-Fi dell'aula</li>
+      <li>Apri la pagina Presenze sul telefono</li>
+      <li>Tocca "Scansiona il QR" e inquadra questo codice</li>
+    </ol>
+    <p id="indirizzo"></p>
+  </div>
+  <div class="colqr">
+    <div id="qr"></div>
+    <div class="barra" id="barra"><i id="bar"></i></div>
+    <p id="sub"></p>
+  </div>
+</div>
 <script>
 const token = new URLSearchParams(location.search).get('t');
 const base = new URL('index.html', location.href).href;
-const ROTAZIONE = 20, VALIDITA = 45;   // secondi (devono coincidere con la funzione SQL)
+let ROTAZIONE = 20, VALIDITA = 45;   // secondi: vengono letti dal database (scheda Impostazioni)
 let ultimo = null, rinnovo = null, inCorso = false;
+
+$('#indirizzo').innerHTML = 'Indirizzo: <b>' + esc(base.replace(/^https?:\/\//, '').replace(/index\.html$/, '')) + '</b>';
 
 function disegna(testo) {
   const q = qrcode(0, 'M');
   q.addData(testo); q.make();
-  const lato = Math.floor(Math.min(innerHeight * 0.62, innerWidth * 0.85));
+  const largo = innerWidth > 860;
+  const col = $('.colqr').clientWidth || innerWidth;
+  const lato = Math.floor(Math.min(col - 36, largo ? Math.min(innerHeight * 0.62, innerWidth * 0.42) : Math.min(innerWidth * 0.8, innerHeight * 0.45)));
   const box = $('#qr');
   box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
   const svg = box.querySelector('svg');
   svg.setAttribute('width', lato); svg.setAttribute('height', lato);
 }
 
+function stato(attiva, testo) {
+  $('#qr').style.display = attiva ? 'block' : 'none';
+  $('#barra').style.display = attiva ? 'block' : 'none';
+  $('#passi').style.display = attiva ? '' : 'none';
+  $('#msg').textContent = testo;
+  if (!attiva) $('#sub').textContent = '';
+}
+
 async function tick() {
   if (inCorso) return; inCorso = true;
   try {
-    if (!token) { $('#msg').textContent = 'Link dello schermo non valido (manca il token).'; return; }
+    if (!token) { stato(false, 'Link dello schermo non valido: manca il codice dell\'aula.'); return; }
     const { data, error } = await sb.rpc('codice_corrente', { p_token: token });
-    if (error || !data) { $('#msg').textContent = 'Connessione assente, riprovo…'; return; }
+    if (error || !data) { stato(false, 'Connessione assente, riprovo…'); return; }
     if (!data.attiva) {
-      $('#qr').style.display = 'none'; ultimo = null; rinnovo = null;
-      $('#msg').textContent = data.motivo === 'token_non_valido' ? 'Schermo non riconosciuto.' : 'Nessuna lezione in corso in questa aula.';
-      $('#sub').textContent = ''; return;
+      ultimo = null; rinnovo = null;
+      stato(false, data.motivo === 'token_non_valido' ? 'Schermo non riconosciuto.' : 'Nessuna lezione in corso in quest\'aula.');
+      return;
     }
+    ROTAZIONE = data.rotazione || ROTAZIONE; VALIDITA = data.validita || VALIDITA;
     if (data.codice !== ultimo) {
       disegna(base + '?c=' + data.codice);
       ultimo = data.codice;            // segnato solo dopo il disegno riuscito
     }
     rinnovo = new Date(data.scade).getTime() - (VALIDITA - ROTAZIONE) * 1000;
-    $('#qr').style.display = 'block';
-    $('#msg').textContent = "Inquadra il QR con l'app e connettiti al Wi-Fi dell'aula";
+    stato(true, '');
   } catch (e) {
-    $('#msg').textContent = 'Errore: ' + (e.message || e);
+    stato(false, 'Errore: ' + (e.message || e));
   } finally { inCorso = false; }
 }
 setInterval(tick, 2000); tick();
@@ -55,7 +80,9 @@ setInterval(() => {
   if (!rinnovo) return;
   const s = Math.round((rinnovo - Date.now()) / 1000);
   $('#sub').textContent = s > 0 ? 'Il codice cambia tra ' + s + ' s' : 'Aggiorno il codice…';
+  $('#bar').style.width = Math.max(0, Math.min(100, (rinnovo - Date.now()) / (ROTAZIONE * 10))) + '%';
   if (s <= 0) tick();
 }, 1000);
+window.addEventListener('resize', () => { ultimo = null; });
 try { navigator.wakeLock && navigator.wakeLock.request('screen'); } catch {}
 </script></body></html>

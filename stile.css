@@ -1,24 +1,111 @@
+/* Presenze · stile "registro": carta verde-grigia, inchiostro scuro, verde registro, timbro */
+:root{
+  --carta:#ECF0EA;--foglio:#fff;--inchiostro:#14201B;--tenue:#586860;--linea:#CBD6CE;
+  --verde:#0E5A45;--verde-scuro:#093F31;--verde-chiaro:#DCEFE4;
+  --ambra:#8F5400;--ambra-sfondo:#FFF0D1;--rosso:#A8231B;--rosso-sfondo:#FCE8E6;
+  --serif:Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
 *{box-sizing:border-box}
-body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:0;background:#f4f6f8;color:#1c2630}
-main{max-width:980px;margin:0 auto;padding:16px}
-h1{font-size:1.5rem;margin:.2em 0}h2{font-size:1.1rem;margin:1.4em 0 .5em}
-button,.btn{background:#0b5cad;color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:.95rem;cursor:pointer}
-button:hover{background:#094a8c}button.sec{background:#e3e8ee;color:#1c2630}
-button.big{width:100%;padding:18px;font-size:1.1rem;margin:10px 0}
-input,select,textarea{font:inherit;padding:8px;border:1px solid #c5ced8;border-radius:8px;background:#fff;max-width:100%}
-textarea{width:100%}
-.riga{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
-table{border-collapse:collapse;width:100%;background:#fff;font-size:.9rem}
-th,td{border:1px solid #dde3ea;padding:6px 8px;text-align:left;vertical-align:top}
-th{background:#eaf0f6}
-.tab-wrap{overflow-x:auto}
-nav{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
-nav button{background:#e3e8ee;color:#1c2630}nav button.on{background:#0b5cad;color:#fff}
-.ok{background:#e3f6e8;border:1px solid #9fd8ae;padding:12px;border-radius:8px;margin:10px 0}
-.warn{background:#fff4dc;border:1px solid #f0cd7a;padding:12px;border-radius:8px;margin:10px 0}
-.err{background:#fde8e8;border:1px solid #f0a0a0;padding:12px;border-radius:8px;margin:10px 0}
-.card{background:#fff;border-radius:10px;padding:14px;margin:10px 0}
-small,.muted{color:#5d6b7a}
-#reader{max-width:420px;margin:10px auto}
-body.schermo{background:#0b1f33;color:#fff;text-align:center;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
-body.schermo canvas{background:#fff;padding:14px;border-radius:12px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--carta);color:var(--inchiostro);font:16px/1.55 var(--sans)}
+h1,h2,h3{font-family:var(--serif);font-weight:600;line-height:1.2;margin:0}
+h1{font-size:clamp(1.7rem,5vw,2.3rem);letter-spacing:-.01em;margin:.4em 0 .15em}
+h2{font-size:1.2rem;margin:1.8em 0 .6em}
+a{color:var(--verde)}
+:focus-visible{outline:3px solid #1B7F63;outline-offset:2px}
+small,.muted{color:var(--tenue)}
+code{background:#E3EAE5;padding:1px 6px;border-radius:4px;font-size:.9em}
+
+/* intestazione */
+#brand{background:var(--foglio);border-bottom:1px solid var(--linea)}
+.brand-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.brand-logo{height:38px;width:auto}
+.brand-segno{flex:none;width:30px;height:30px;border-radius:7px;background:var(--verde);position:relative}
+.brand-segno::after{content:"";position:absolute;left:10px;top:5px;width:7px;height:13px;border:solid #fff;border-width:0 3px 3px 0;transform:rotate(40deg)}
+.brand-testo{display:flex;flex-direction:column;line-height:1.15}
+.brand-testo b{font-family:var(--serif);font-size:1.15rem}
+.brand-testo small{font-size:.8rem}
+
+main{max-width:600px;margin:0 auto;padding:20px 16px 56px}
+main.larga{max-width:1120px}
+.accesso{margin-top:6vh}
+
+/* pulsanti e campi */
+button,.btn{font:inherit;font-weight:600;background:var(--verde);color:#fff;border:0;border-radius:10px;padding:10px 16px;min-height:44px;cursor:pointer}
+button:hover{background:var(--verde-scuro)}
+button.sec{background:transparent;color:var(--inchiostro);border:1px solid var(--linea)}
+button.sec:hover{background:var(--verde-chiaro)}
+button.big{width:100%;font-size:1.15rem;padding:18px;border-radius:12px}
+input,select,textarea{font:inherit;padding:10px 12px;min-height:44px;border:1px solid #AEBBB3;border-radius:8px;background:#fff;color:inherit;max-width:100%}
+textarea{width:100%;min-height:0}
+label{font-size:.92rem;color:var(--tenue)}
+.riga{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;align-items:center}
+
+/* pannelli e messaggi */
+.card{background:var(--foglio);border:1px solid var(--linea);border-radius:8px;padding:16px;margin:12px 0}
+.azione{border-left:5px solid var(--verde)}
+.azione p{margin:0 0 12px}
+div.ok,div.warn,div.err{padding:12px 14px;border-radius:8px;margin:12px 0;border:1px solid;border-left-width:5px}
+div.ok{background:var(--verde-chiaro);border-color:#8CC7AB}
+div.warn{background:var(--ambra-sfondo);border-color:#E0B766}
+div.err{background:var(--rosso-sfondo);border-color:#E4A39E}
+.piede{margin-top:32px;text-align:center}
+
+/* esito: il timbro */
+.esito-ok{display:flex;align-items:center;gap:18px;background:var(--foglio);border:1px solid var(--linea);border-radius:8px;padding:16px 18px;margin:12px 0}
+.timbro{flex:none;border:3px double var(--verde);color:var(--verde);border-radius:10px;padding:9px 14px;font:700 1.05rem/1 var(--serif);letter-spacing:.08em;text-transform:uppercase;transform:rotate(-5deg);animation:timbra .45s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes timbra{from{opacity:0;transform:rotate(-5deg) scale(1.6)}to{opacity:1;transform:rotate(-5deg) scale(1)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+#reader{max-width:420px;margin:12px auto 0}
+
+/* tabelle (righe orizzontali, come un registro) */
+.tab-wrap{overflow-x:auto;background:var(--foglio);border:1px solid var(--linea);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th{font-weight:600;text-align:left;color:var(--tenue);font-size:.85rem;border-bottom:2px solid var(--linea);padding:10px 12px;background:#F6F8F5;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #E3EAE5;vertical-align:top}
+tr:last-child td{border-bottom:0}
+.chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.82rem;font-weight:600;white-space:nowrap}
+.chip.ok{background:var(--verde-chiaro);color:#0A4636}
+.chip.warn{background:var(--ambra-sfondo);color:var(--ambra)}
+.chip.no{background:var(--rosso-sfondo);color:var(--rosso)}
+.chip.neu{background:#E6EAE7;color:var(--tenue)}
+
+/* numeri chiave */
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0}
+.kpi div{background:var(--foglio);border:1px solid var(--linea);border-radius:8px;padding:12px 14px}
+.kpi b{display:block;font:600 2.1rem/1 var(--serif);font-variant-numeric:tabular-nums}
+.kpi span{color:var(--tenue);font-size:.88rem}
+
+/* pannello admin */
+.shell{display:grid;grid-template-columns:190px 1fr;gap:28px;align-items:start}
+.shell nav{display:flex;flex-direction:column;gap:2px;position:sticky;top:12px}
+.shell nav button{background:transparent;color:var(--inchiostro);text-align:left;font-weight:500;border-radius:8px}
+.shell nav button:hover{background:var(--verde-chiaro)}
+.shell nav button.on{background:var(--verde);color:#fff;font-weight:600}
+.shell nav button.sec{margin-top:14px;border:1px solid var(--linea)}
+#view>h2:first-child{margin-top:.2em}
+@media(max-width:760px){.shell{grid-template-columns:1fr}.shell nav{flex-direction:row;flex-wrap:wrap;position:static}.shell nav button.sec{margin-top:0}}
+
+/* schermo aula */
+body.schermo{background:var(--verde-scuro);color:#fff;min-height:100vh}
+body.schermo #brand{background:transparent;border:0}
+body.schermo .brand-testo b{color:#fff}
+body.schermo .brand-testo small{color:#A9CDBE}
+body.schermo .brand-segno{background:#fff}
+body.schermo .brand-segno::after{border-color:var(--verde-scuro)}
+.palco{max-width:1120px;margin:0 auto;padding:12px 16px 40px;display:grid;grid-template-columns:1fr auto;gap:56px;align-items:center;min-height:calc(100vh - 90px)}
+.palco h1{color:#fff;font-size:clamp(2rem,4.6vw,3.6rem);margin:0 0 .2em}
+.passi{list-style:none;padding:0;margin:28px 0 0;counter-reset:p}
+.passi li{counter-increment:p;display:flex;gap:16px;align-items:baseline;font-size:clamp(1.1rem,2vw,1.5rem);margin:16px 0;line-height:1.35}
+.passi li::before{content:counter(p);font:600 1.5em/1 var(--serif);color:#8FD1B5;width:1em;flex:none}
+#indirizzo{margin-top:26px;color:#A9CDBE;font-size:1.05rem}
+#indirizzo b{color:#fff;font-weight:600}
+.colqr{text-align:center}
+#qr{background:#fff;padding:18px;border-radius:14px;display:none;line-height:0}
+#qr svg{display:block}
+.barra{height:6px;background:rgba(255,255,255,.2);border-radius:3px;margin-top:14px;overflow:hidden;display:none}
+.barra i{display:block;height:100%;width:100%;background:#8FD1B5;transition:width 1s linear}
+#sub{color:#A9CDBE;margin:10px 0 0}
+#msg{font-size:1.3rem;margin:0}
+@media(max-width:860px){.palco{grid-template-columns:1fr;gap:28px}}

@@ -4,6 +4,18 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = d => new Date(d).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
 
+// Intestazione con logo o segno + nome servizio + ente
+function brand() {
+  const h = $('#brand');
+  if (!h) return;
+  if (BRAND.colore) document.documentElement.style.setProperty('--verde', BRAND.colore);
+  h.innerHTML = `<div class="brand-in">${BRAND.logo
+      ? `<img class="brand-logo" src="${esc(BRAND.logo)}" alt="${esc(BRAND.ente || BRAND.nome)}">`
+      : '<span class="brand-segno" aria-hidden="true"></span>'}
+    <span class="brand-testo"><b>${esc(BRAND.nome)}</b>${BRAND.ente ? `<small>${esc(BRAND.ente)}</small>` : ''}</span></div>`;
+}
+document.addEventListener('DOMContentLoaded', brand);
+
 // Legge TUTTE le righe (Supabase ne restituisce al massimo 1000 per richiesta)
 async function all(mk) {
   let out = [], from = 0;
@@ -26,17 +38,18 @@ function avvia(el, onReady, nota = '') {
 }
 
 function mostraLogin(el, nota) {
-  el.innerHTML = `<h1>Accedi</h1>${nota ? `<p class="muted">${esc(nota)}</p>` : ''}
-    <form id="lf" class="card"><p>Scrivi la tua email: ti mandiamo un link per entrare, senza password.</p>
-    <div class="riga"><input type="email" id="le" placeholder="nome@email.it" required style="flex:1;min-width:220px"><button>Invia link</button></div>
-    <div id="lm"></div></form>`;
+  el.innerHTML = `<div class="accesso"><h1>Entra con la tua email</h1>
+    <p class="muted">${esc(nota || 'Ti mandiamo un link: aprilo e sei dentro, senza password.')}</p>
+    <form id="lf" class="card"><div class="riga">
+      <input type="email" id="le" placeholder="nome@email.it" autocomplete="email" required style="flex:1;min-width:220px">
+      <button>Invia il link</button></div><div id="lm"></div></form></div>`;
   $('#lf').onsubmit = async e => {
     e.preventDefault();
     const email = $('#le').value.trim();
     const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
     $('#lm').innerHTML = error
-      ? `<div class="err">${esc(error.message)}</div>`
-      : `<div class="ok">Link inviato a <b>${esc(email)}</b>. Aprilo da questo telefono/computer (controlla anche lo spam).</div>`;
+      ? `<div class="err"><b>Non riusciamo a inviare il link.</b> Riprova tra qualche minuto. <small>(${esc(error.message)})</small></div>`
+      : `<div class="ok"><b>Link inviato.</b> Controlla la posta di ${esc(email)} e aprilo da questo dispositivo. Se non lo trovi, guarda nello spam.</div>`;
   };
 }
 

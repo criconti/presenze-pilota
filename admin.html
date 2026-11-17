@@ -2,11 +2,12 @@
 <html lang="it"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Presenze · Admin</title>
-<link rel="stylesheet" href="stile.css">
+<meta name="theme-color" content="#0E5A45">
+<link rel="stylesheet" href="stile.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="config.js"></script><script src="common.js"></script>
-</head><body><main id="app"><p>Caricamento…</p></main>
+<script src="config.js?v=2"></script><script src="common.js?v=2"></script>
+</head><body><header id="brand"></header><main id="app" class="larga"><p>Caricamento…</p></main>
 <script>
 const app = $('#app');
 const D = {};
@@ -15,18 +16,17 @@ let V;
 avvia(app, async () => {
   const { data } = await sb.from('admins').select('user_id');
   if (!data || !data.length) {
-    app.innerHTML = `<h1>Admin</h1><div class="err">Questo account non e' abilitato come amministratore.</div><p><a href="#" onclick="esci();return false">Esci</a></p>`;
+    app.innerHTML = `<h1>Accesso non abilitato</h1><div class="err">Questo account non e' abilitato come amministratore.</div><p><a href="#" onclick="esci();return false">Esci</a></p>`;
     return;
   }
-  app.innerHTML = `<h1>Presenze · Pannello admin</h1>
-    <nav>${[['aule','Sedi e aule'],['corsi','Corsi'],['studenti','Studenti'],['lezioni','Lezioni'],['presenze','Presenze'],['anomalie','Anomalie'],['giust','Giustificazioni']]
+  app.innerHTML = `<div class="shell"><nav>${[['aule','Sedi e aule'],['corsi','Corsi'],['studenti','Studenti'],['lezioni','Lezioni'],['presenze','Presenze'],['anomalie','Anomalie'],['giust','Giustificazioni'],['impost','Impostazioni']]
       .map(([k, n]) => `<button data-t="${k}" onclick="nav('${k}')">${n}</button>`).join('')}
-      <button class="sec" onclick="esci()">Esci</button></nav><div id="view"></div>`;
+      <button class="sec" onclick="esci()">Esci</button></nav><div id="view"></div></div>`;
   V = $('#view');
   nav('aule');
 });
 
-const TABS = { aule: tAule, corsi: tCorsi, studenti: tStudenti, lezioni: tLezioni, presenze: tPresenze, anomalie: tAnomalie, giust: tGiust };
+const TABS = { aule: tAule, corsi: tCorsi, studenti: tStudenti, lezioni: tLezioni, presenze: tPresenze, anomalie: tAnomalie, giust: tGiust, impost: tImpost };
 function nav(t) {
   document.querySelectorAll('nav button[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   V.innerHTML = '<p>Caricamento…</p>';
@@ -36,6 +36,9 @@ function chk(r) { if (r.error) { alert('Errore: ' + r.error.message); throw r.er
 const opt = (l, f) => l.map(x => `<option value="${x.id}">${esc(f(x))}</option>`).join('');
 const fd = form => Object.fromEntries([...new FormData(form)].map(([k, v]) => [k, v === '' ? null : v]));
 const un = x => [].concat(x || [])[0];
+const ETANOM = { rete_non_ammessa: 'Rete non ammessa', dispositivo_condiviso: 'Stesso telefono di un altro studente' };
+const etAnom = a => (a || '').split(',').map(x => ETANOM[x] || x).join(' + ');
+const chip = s => `<span class="chip ${s.includes('verificare') ? 'warn' : s.startsWith('Presente') ? 'ok' : s.includes('giustificato') ? 'neu' : 'no'}">${esc(s)}</span>`;
 
 async function loadBase() {
   const [a, b, c, d] = await Promise.all([
@@ -154,7 +157,7 @@ let ULT = null;
 async function tPresenze() {
   await loadBase();
   V.innerHTML = `<h2>Presenze</h2><div class="riga"><select id="pl">${D.lezioni.map(l => `<option value="${l.id}">${fmt(l.inizio)} · ${esc(l.corsi?.nome)} · ${esc(l.aule?.nome)}</option>`).join('')}</select>
-    <button onclick="mostra()">Mostra</button><button class="sec" onclick="xLezione()">Excel lezione</button><button class="sec" onclick="xCorso()">Excel corso intero</button></div><div id="pt" class="tab-wrap"></div>`;
+    <button onclick="mostra()">Mostra</button><button class="sec" onclick="xLezione()">Excel lezione</button><button class="sec" onclick="xCorso()">Excel corso intero</button></div><div id="pt"></div>`;
   if (D.lezioni.length) mostra();
 }
 async function righeLezione(id) {
@@ -165,21 +168,32 @@ async function righeLezione(id) {
     all(() => sb.from('giustificazioni').select('*').eq('lezione_id', id).order('id'))
   ]);
   const pm = new Map(pre.map(p => [p.studente_id, p])), gm = new Map(gi.map(g => [g.studente_id, g]));
-  const righe = isc.map(i => i.studenti).filter(Boolean).sort((a, b) => (a.cognome + a.nome).localeCompare(b.cognome + b.nome)).map(s => {
+  const studs = isc.map(i => i.studenti).filter(Boolean).sort((a, b) => (a.cognome + a.nome).localeCompare(b.cognome + b.nome));
+  const righe = studs.map(s => {
     const p = pm.get(s.id), g = gm.get(s.id);
-    const stato = p ? (p.anomalia ? 'Presente (da verificare)' : 'Presente')
+    const stato = p ? (p.anomalia ? 'Presente (da verificare)' : p.manuale ? 'Presente (inserita dal docente)' : 'Presente')
       : g ? (g.stato === 'accettata' ? 'Assente giustificato' : g.stato === 'in_attesa' ? 'Assente (giust. in attesa)' : 'Assente')
       : 'Assente';
-    return [s.matricola, s.cognome, s.nome, stato, p ? fmt(p.creato_il) : '', p ? (p.rete_ok ? 'Si' : 'No') : '', p?.anomalia || '', g?.motivo || ''];
+    return [s.matricola, s.cognome, s.nome, stato, p ? fmt(p.creato_il) : '', p ? (p.rete_ok ? 'Si' : 'No') : '', etAnom(p?.anomalia), g?.motivo || ''];
   });
-  return { l, righe, intest: ['Matricola', 'Cognome', 'Nome', 'Stato', 'Orario', 'Rete aula', 'Anomalia', 'Giustificazione'] };
+  return { l, righe, sid: studs.map(s => s.id), intest: ['Matricola', 'Cognome', 'Nome', 'Stato', 'Orario', 'Rete aula', 'Anomalia', 'Giustificazione'] };
 }
 async function mostra() {
   $('#pt').innerHTML = 'Caricamento…';
   ULT = await righeLezione($('#pl').value);
   const pres = ULT.righe.filter(r => r[3].startsWith('Presente')).length;
-  $('#pt').innerHTML = `<p><b>${pres}</b> presenti su <b>${ULT.righe.length}</b> iscritti</p><table><tr>${ULT.intest.map(h => `<th>${h}</th>`).join('')}</tr>` +
-    ULT.righe.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('') + '</table>';
+  const da = ULT.righe.filter(r => r[3].includes('verificare')).length;
+  const gi = ULT.righe.filter(r => r[3].includes('giustificato')).length;
+  $('#pt').innerHTML = `<div class="kpi"><div><b>${pres}</b><span>presenti su ${ULT.righe.length} iscritti</span></div><div><b>${da}</b><span>da verificare</span></div><div><b>${gi}</b><span>assenze giustificate</span></div><div><b>${ULT.righe.length - pres - gi}</b><span>assenti</span></div></div>` +
+    `<div class="tab-wrap"><table><tr>${ULT.intest.map(h => `<th>${h}</th>`).join('')}<th></th></tr>` +
+    ULT.righe.map((r, k) => `<tr>${r.map((c, i) => `<td>${i === 3 ? chip(c) : esc(c)}</td>`).join('')}<td>${azione(r, k)}</td></tr>`).join('') + '</table></div>';
+}
+const azione = (r, k) => (r[3].startsWith('Presente') && !r[3].includes('verificare')) ? '' :
+  `<button class="sec" onclick="segna('${ULT.l.id}','${ULT.sid[k]}')">${r[3].includes('verificare') ? 'Conferma presenza' : 'Segna presente'}</button>`;
+async function segna(lez, stud) {
+  if (!confirm('Segnare presente questo studente? Resta annotato come "inserita dal docente".')) return;
+  chk(await sb.from('presenze').upsert({ lezione_id: lez, studente_id: stud, manuale: true, anomalia: null, rete_ok: false }, { onConflict: 'lezione_id,studente_id' }));
+  mostra();
 }
 async function xLezione() {
   if (!ULT) await mostra();
@@ -194,7 +208,7 @@ async function xCorso() {
   const ids = lez.map(x => x.id);
   const [isc, pre, gi] = await Promise.all([
     all(() => sb.from('iscrizioni').select('studenti(id,matricola,cognome,nome)').eq('corso_id', l0.corso_id).order('studente_id')),
-    all(() => sb.from('presenze').select('lezione_id,studente_id,anomalia').in('lezione_id', ids).order('id')),
+    all(() => sb.from('presenze').select('lezione_id,studente_id,anomalia,manuale').in('lezione_id', ids).order('id')),
     all(() => sb.from('giustificazioni').select('lezione_id,studente_id,stato').in('lezione_id', ids).eq('stato', 'accettata').order('id'))
   ]);
   const P = new Map(pre.map(p => [p.lezione_id + p.studente_id, p])), G = new Set(gi.map(g => g.lezione_id + g.studente_id));
@@ -204,7 +218,7 @@ async function xCorso() {
     let p = 0, g = 0;
     const celle = lez.map(l => {
       const k = l.id + s.id, x = P.get(k);
-      if (x) { p++; return x.anomalia ? 'P*' : 'P'; }
+      if (x) { p++; return x.manuale ? 'M' : x.anomalia ? 'P*' : 'P'; }
       if (G.has(k)) { g++; return 'G'; }
       return 'A';
     });
@@ -212,7 +226,7 @@ async function xCorso() {
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...rows]), 'Riepilogo');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['P = presente', 'P* = presente da verificare', 'G = assenza giustificata', 'A = assente']]), 'Legenda');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['P = presente', 'P* = presente da verificare', 'M = inserita dal docente', 'G = assenza giustificata', 'A = assente']]), 'Legenda');
   XLSX.writeFile(wb, `riepilogo_${(l0.corsi?.nome || 'corso').replace(/\W+/g, '_')}.xlsx`);
 }
 
@@ -224,12 +238,38 @@ async function tAnomalie() {
   V.innerHTML = `<h2>Anomalie (ultime 500)</h2><p><button class="sec" onclick="xAnom()">Esporta Excel</button></p><div class="tab-wrap"><table>
     <tr><th>Quando</th><th>Studente</th><th>Corso</th><th>Aula</th><th>Anomalia</th><th>IP</th></tr>
     ${rows.map(r => `<tr><td>${fmt(r.creato_il)}</td><td>${esc(r.cognome)} ${esc(r.nome)} (${esc(r.matricola)})</td><td>${esc(r.corso)}</td><td>${esc(r.aula)}</td><td>${esc(txt(r.anomalia))}</td><td>${esc(r.ip)}</td></tr>`).join('') || '<tr><td colspan="6">Nessuna anomalia</td></tr>'}</table></div>`;
+  const t = await sb.from('tentativi').select('*, studenti(matricola,cognome,nome), lezioni(inizio, corsi(nome))').order('creato_il', { ascending: false }).limit(200);
+  const labT = { codice_scaduto: 'Codice scaduto', codice_non_valido: 'Codice non valido', non_iscritto: 'Non iscritto al corso', account_non_collegato: 'Email non presente nell\'elenco studenti' };
+  V.insertAdjacentHTML('beforeend', `<h2>Tentativi non riusciti (ultimi 200)</h2>
+    <p class="muted">Ogni scansione che non ha registrato la presenza resta qui con il motivo. Serve per verificare chi dice "ho provato ma non ha funzionato".</p>` +
+    (t.error ? '<div class="warn">Questa sezione richiede l\'aggiornamento del database (file aggiornamento_02.sql).</div>'
+      : `<div class="tab-wrap"><table><tr><th>Quando</th><th>Studente</th><th>Lezione</th><th>Motivo</th><th>IP</th></tr>` +
+        (t.data.map(r => `<tr><td>${fmt(r.creato_il)}</td><td>${r.studenti ? esc(r.studenti.cognome) + ' ' + esc(r.studenti.nome) + ' (' + esc(r.studenti.matricola) + ')' : '<span class="muted">non identificato</span>'}</td>
+          <td>${r.lezioni ? fmt(r.lezioni.inizio) + ' · ' + esc(r.lezioni.corsi?.nome) : ''}</td><td>${esc(labT[r.motivo] || r.motivo)}</td><td>${esc(r.ip)}</td></tr>`).join('') || '<tr><td colspan="5">Nessun tentativo fallito</td></tr>') + '</table></div>'));
   window.xAnom = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Quando', 'Matricola', 'Cognome', 'Nome', 'Corso', 'Aula', 'Anomalia', 'IP'],
       ...rows.map(r => [fmt(r.creato_il), r.matricola, r.cognome, r.nome, r.corso, r.aula, txt(r.anomalia), r.ip])]), 'Anomalie');
     XLSX.writeFile(wb, 'anomalie_presenze.xlsx');
   };
+}
+
+/* ---------- IMPOSTAZIONI ---------- */
+async function tImpost() {
+  const r = await sb.from('impostazioni').select('*');
+  if (r.error) { V.innerHTML = '<div class="warn">Questa sezione richiede l\'aggiornamento del database (file aggiornamento_02.sql).</div>'; return; }
+  const v = k => (r.data.find(x => x.chiave === k) || {}).valore;
+  V.innerHTML = `<h2>Codice QR</h2><div class="card">
+    <p class="muted" style="margin-top:0">Il codice sullo schermo dell'aula si rinnova da solo. Rinnovarlo spesso impedisce di inoltrare il QR a chi non e' in aula; una validita' piu' lunga aiuta chi ha la rete lenta. Per le aule grandi: rinnovo ogni 30 secondi, validita' 90.</p>
+    <div class="riga"><label>Si rinnova ogni <input id="ir" type="number" min="10" max="120" value="${v('rotazione') ?? 20}" style="width:90px"> secondi</label></div>
+    <div class="riga"><label>Resta valido per <input id="iv" type="number" min="20" max="300" value="${v('validita') ?? 45}" style="width:90px"> secondi</label></div>
+    <div class="riga"><button onclick="salvaImp()">Salva</button><span id="im"></span></div></div>`;
+}
+async function salvaImp() {
+  const r = Math.round(+$('#ir').value), v = Math.round(+$('#iv').value);
+  if (!(r >= 10 && v >= r + 10)) return alert('Il rinnovo deve essere di almeno 10 secondi e la validita\' deve superarlo di almeno 10 secondi.');
+  chk(await sb.from('impostazioni').upsert([{ chiave: 'rotazione', valore: r }, { chiave: 'validita', valore: v }], { onConflict: 'chiave' }));
+  $('#im').innerHTML = ' <span class="chip ok">Salvato</span>';
 }
 
 /* ---------- GIUSTIFICAZIONI ---------- */
